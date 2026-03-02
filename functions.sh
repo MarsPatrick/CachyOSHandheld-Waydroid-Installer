@@ -1,13 +1,14 @@
 #!/bin/bash
 
-# define functions here
+# ─── Functions ────────────────────────────────────────────────────────────────
+
 mount_waydroid_var () {
-	# this will initialize and configure custom /var/lib/waydroid
-	# first make sure /var/lib/waydroid is not mounted
+	# Initialize and configure custom /var/lib/waydroid
+	# First make sure /var/lib/waydroid is not already mounted
 	echo -e "$current_password\n" | sudo -S umount /var/lib/waydroid &> /dev/null
-	echo -e "$current_password\n" | sudo -S losetup -d $(losetup | grep waydroid.img | cut -d " " -f1)  &> /dev/null
-	
-	# prepare the custom /var/lib/waydroid
+	echo -e "$current_password\n" | sudo -S losetup -d $(losetup | grep waydroid.img | cut -d " " -f1) &> /dev/null
+
+	# Prepare the custom /var/lib/waydroid from the compressed image in extras/
 	gunzip -k -f extras/waydroid.img.gz && \
 		mkfs.ext4 -F extras/waydroid.img && \
 		ROOTDEV=$(sudo losetup --find --show extras/waydroid.img) && \
@@ -15,56 +16,59 @@ mount_waydroid_var () {
 }
 
 unmount_waydroid_var () {
-	# this will unmount the custom /var/lib/waydroid
+	# Unmount the custom /var/lib/waydroid
 	echo -e "$current_password\n" | sudo -S umount /var/lib/waydroid &> /dev/null
-	echo -e "$current_password\n" | sudo -S losetup -d $(losetup | grep waydroid.img | cut -d " " -f1)  &> /dev/null
+	echo -e "$current_password\n" | sudo -S losetup -d $(losetup | grep waydroid.img | cut -d " " -f1) &> /dev/null
 }
 
 cleanup_exit () {
-	# call this function to perform cleanup when a sanity check fails
-	
-	echo Something went wrong! Performing cleanup. Run the script again to install waydroid.
-	
-	# remove installed packages
-	echo -e "$current_password\n" | sudo -S pacman -R --noconfirm libglibutil libgbinder \
-		python-gbinder waydroid wlroots cage wlr-randr binder_linux-dkms fakeroot debugedit \
-		dkms plymouth linux-neptune-$(uname -r | cut -d "-" -f5)-headers &> /dev/null
-	
-	# unmount the custom /var/lib/waydroid
+	# Call this function to perform cleanup when something goes wrong
+
+	echo "Something went wrong! Performing cleanup. Run the script again to install Waydroid."
+
+	# Remove installed packages
+	# Note: linux-cachyos-deckify-headers kept intentionally (was pre-existing or needed for other things)
+	echo -e "$current_password\n" | sudo -S pacman -R --noconfirm \
+		libglibutil libgbinder python-gbinder waydroid \
+		wlroots cage wlr-randr binder_linux-dkms \
+		fakeroot debugedit dkms &> /dev/null
+
+	# Unmount the custom /var/lib/waydroid
 	echo -e "$current_password\n" | sudo -S umount /var/lib/waydroid &> /dev/null
-	echo -e "$current_password\n" | sudo -S losetup -d $(losetup | grep waydroid.img | cut -d " " -f1)  &> /dev/null
+	echo -e "$current_password\n" | sudo -S losetup -d $(losetup | grep waydroid.img | cut -d " " -f1) &> /dev/null
 
-	# delete the waydroid directories
+	# Delete waydroid directories and configs
 	echo -e "$current_password\n" | sudo -S rm -rf /var/lib/waydroid &> /dev/null
-	
-	# delete waydroid config and scripts
-	echo -e "$current_password\n" | sudo -S rm /etc/sudoers.d/zzzzzzzz-waydroid /etc/modules-load.d/waydroid.conf /usr/bin/waydroid* &> /dev/null
+	echo -e "$current_password\n" | sudo -S rm -f \
+		/etc/sudoers.d/zzzzzzzz-waydroid \
+		/etc/modules-load.d/waydroid_binder.conf \
+		/etc/modprobe.d/waydroid_binder.conf &> /dev/null
+	echo -e "$current_password\n" | sudo -S rm -f /usr/bin/waydroid* &> /dev/null
 
-	# delete Waydroid Toolbox and Waydroid Update symlinks
-	rm ~/Desktop/Waydroid-Updater &> /dev/null
-	rm ~/Desktop/Waydroid-Toolbox &> /dev/null
+	# Delete desktop shortcuts
+	rm -f "$CURRENT_HOME/Desktop/Waydroid-Updater" &> /dev/null
+	rm -f "$CURRENT_HOME/Desktop/Waydroid-Toolbox" &> /dev/null
 
-	# delete Android_Waydroid folder and enable the readonly
-	echo -e "$current_password\n" | sudo -S rm -rf ~/Android_Waydroid &> /dev/null
-	echo -e "$current_password\n" | sudo -S steamos-readonly enable &> /dev/null
-	
-	# re-enable Decky Loader Plugin Loader service
-	if [ -f $PLUGIN_LOADER ]
-	then
-		echo Re-enabling the Decky Loader plugin loader service.
+	# Delete Android_Waydroid folder
+	rm -rf "$CURRENT_HOME/Android_Waydroid" &> /dev/null
+
+	# Re-enable Decky Loader if present
+	if [ -f "$CURRENT_HOME/homebrew/services/PluginLoader" ]; then
+		echo "Re-enabling the Decky Loader plugin loader service."
 		echo -e "$current_password\n" | sudo -S systemctl start plugin_loader.service
 	fi
-	
-	echo Cleanup completed. Please open an issue on the GitHub repo or leave a comment on the YT channel - 10MinuteSteamDeckGamer.
-	exit
+
+	echo "Cleanup completed. Please open an issue on the GitHub repo."
+	exit 1
 }
 
 prepare_custom_image_location () {
-# call this function when deploying a custom Android image
-# custom Android images needs to be placed in /etc/waydroid-extra/images
-# this will create a symlink to /etc/waydroid-extra/images
-echo -e "$current_password\n" | sudo mkdir /etc/waydroid-extra &> /dev/null
-echo -e "$current_password\n" | sudo -S ln -s /var/lib/waydroid/custom /etc/waydroid-extra/images &> /dev/null
+	# Call this when deploying a custom Android image
+	# Custom images need to be placed in /etc/waydroid-extra/images
+	echo -e "$current_password\n" | sudo -S mkdir -p /etc/waydroid-extra &> /dev/null
+	echo -e "$current_password\n" | sudo -S mkdir -p /var/lib/waydroid/custom &> /dev/null
+	echo -e "$current_password\n" | sudo -S ln -sf /var/lib/waydroid/custom \
+		/etc/waydroid-extra/images &> /dev/null
 }
 
 download_image () {
@@ -75,82 +79,92 @@ download_image () {
 	local name=$4
 	local hash
 
-	echo Downloading $name image
-	echo -e "$current_password\n" | sudo -S curl -o $dest_zip $src -L
+	echo "Downloading $name image..."
+	echo -e "$current_password\n" | sudo -S curl -o "$dest_zip" "$src" -L
+
+	echo "Verifying hash..."
 	hash=$(sha256sum "$dest_zip" | awk '{print $1}')
-	# Verify the hash
 	if [[ "$hash" != "$src_hash" ]]; then
-		echo sha256 hash mismatch for $name image, indicating a corrupted download. This might be due to a network error, you can try again.
+		echo "SHA256 hash mismatch for $name image - download may be corrupted. Try running the script again."
 		cleanup_exit
 	fi
+	echo "Hash verified OK."
 
-	echo Extracting Archive
-	echo -e "$current_password\n" | sudo -S unzip -o $dest -d $dest
-	echo -e "$current_password\n" | sudo -S rm $dest_zip
+	echo "Extracting archive..."
+	echo -e "$current_password\n" | sudo -S unzip -o "$dest_zip" -d "$dest"
+	echo -e "$current_password\n" | sudo -S rm -f "$dest_zip"
 }
 
-# apply custom config for controller detection, root and fingerprint spoof
 apply_android_custom_config () {
+	# Apply custom config for controller detection, root and fingerprint spoof
 
-	# waydroid_base.prop - controller config and disable root
+	# Append base props (controller config, disable root)
 	echo "" | sudo tee -a /var/lib/waydroid/waydroid_base.prop > /dev/null
 	cat extras/waydroid_base.prop | sudo tee -a /var/lib/waydroid/waydroid_base.prop > /dev/null
 
-	# waydroid_base.prop fingerprint spoof - check if A11 or A13 and apply the spoof accordingly
-	if [ "$Android_Choice" == "A13_NO_GAPPS" ] || [ "$Android_Choice" == "A13_GAPPS" ] || [ "$Android_Choice" == "A13_CUSTOM" ]
-	then
+	# Apply fingerprint spoof depending on Android variant chosen
+	if [ "$Android_Choice" == "A13_NO_GAPPS" ] || \
+	   [ "$Android_Choice" == "A13_GAPPS" ] || \
+	   [ "$Android_Choice" == "A13_CUSTOM" ]; then
 		echo "" | sudo tee -a /var/lib/waydroid/waydroid_base.prop > /dev/null
 		cat extras/android_spoof.prop | sudo tee -a /var/lib/waydroid/waydroid_base.prop > /dev/null
 
-	else [ "$Android_Choice" == "TV13_NO_GAPPS" ] || [ "$Android_Choce" == "TV13_GAPPS" ]
-		echo TV13.
+	elif [ "$Android_Choice" == "TV13_NO_GAPPS" ] || \
+	     [ "$Android_Choice" == "TV13_GAPPS" ]; then
+		echo "Applying TV13 fingerprint spoof."
 		echo "" | sudo tee -a /var/lib/waydroid/waydroid_base.prop > /dev/null
-		cat extras/androidtv_spoof.prop | sudo tee -a /var/lib/waydroid/waydroid_base.prop
+		cat extras/androidtv_spoof.prop | sudo tee -a /var/lib/waydroid/waydroid_base.prop > /dev/null
 	fi
+
+	# Change GPU rendering to minigbm_gbm_mesa
+	echo -e "$current_password\n" | sudo -S sed -i \
+		"s/ro.hardware.gralloc=.*/ro.hardware.gralloc=minigbm_gbm_mesa/g" \
+		/var/lib/waydroid/waydroid_base.prop
 }
 
-# install arm translation layer from casualsnek / aleasto waydroid_script
 install_android_extras () {
+	# Install ARM translation layer (libhoudini/libndk) and widevine
+	# Uses casualsnek/aleasto waydroid_script via Python venv
 
-	# casualsnek / aleasto waydroid_script - install libndk / libhoudini and widevine
-	python3 -m venv $WAYDROID_SCRIPT_DIR/venv
-	$WAYDROID_SCRIPT_DIR/venv/bin/pip install -r $WAYDROID_SCRIPT_DIR/requirements.txt &> /dev/null
+	python3 -m venv "$WAYDROID_SCRIPT_DIR/venv"
+	"$WAYDROID_SCRIPT_DIR/venv/bin/pip" install -r "$WAYDROID_SCRIPT_DIR/requirements.txt" &> /dev/null
 
 	echo "$ARM_Choice installation started:"
-	echo -e "$current_password\n" | sudo -S $WAYDROID_SCRIPT_DIR/venv/bin/python3 $WAYDROID_SCRIPT_DIR/main.py -a13 install {$ARM_Choice,widevine}
+	echo -e "$current_password\n" | sudo -S \
+		"$WAYDROID_SCRIPT_DIR/venv/bin/python3" "$WAYDROID_SCRIPT_DIR/main.py" \
+		-a13 install {$ARM_Choice,widevine}
 
-	echo casualsnek / aleasto waydroid_script done. $ARM_Choice installed.
-	echo -e "$current_password\n" | sudo -S rm -rf $WAYDROID_SCRIPT_DIR
+	echo "casualsnek/aleasto waydroid_script done. $ARM_Choice installed."
+	echo -e "$current_password\n" | sudo -S rm -rf "$WAYDROID_SCRIPT_DIR"
 }
 
-# install arm translation layer from casualsnek / aleasto waydroid_script. this also includes GAPPS. use this for custom waydroid images
 install_android_extras_custom () {
+	# Install ARM translation layer, widevine AND GAPPS
+	# Use this for custom Android images (A13_CUSTOM)
 
-	# casualsnek / aleasto waydroid_script - install libndk / libhoudini, widevine and GAPPS
-	python3 -m venv $WAYDROID_SCRIPT_DIR/venv
-	$WAYDROID_SCRIPT_DIR/venv/bin/pip install -r $WAYDROID_SCRIPT_DIR/requirements.txt &> /dev/null
+	python3 -m venv "$WAYDROID_SCRIPT_DIR/venv"
+	"$WAYDROID_SCRIPT_DIR/venv/bin/pip" install -r "$WAYDROID_SCRIPT_DIR/requirements.txt" &> /dev/null
 
 	echo "$ARM_Choice installation started:"
-	echo -e "$current_password\n" | sudo -S $WAYDROID_SCRIPT_DIR/venv/bin/python3 $WAYDROID_SCRIPT_DIR/main.py -a13 install {$ARM_Choice,widevine,gapps}
-	
-	echo casualsnek / aleasto waydroid_script done. $ARM_Choice installed.
-	echo -e "$current_password\n" | sudo -S rm -rf $WAYDROID_SCRIPT_DIR
+	echo -e "$current_password\n" | sudo -S \
+		"$WAYDROID_SCRIPT_DIR/venv/bin/python3" "$WAYDROID_SCRIPT_DIR/main.py" \
+		-a13 install {$ARM_Choice,widevine,gapps}
+
+	echo "casualsnek/aleasto waydroid_script done. $ARM_Choice + GAPPS installed."
+	echo -e "$current_password\n" | sudo -S rm -rf "$WAYDROID_SCRIPT_DIR"
 }
 
 check_waydroid_init () {
-	# check if waydroid initialization completed without errors
-	if [ $? -eq 0 ]
-	then
-		echo Waydroid initialization completed without errors!
-
+	# Check if waydroid initialization completed without errors
+	if [ $? -eq 0 ]; then
+		echo "Waydroid initialization completed without errors!"
 	else
-		echo Waydroid did not initialize correctly.
-		echo This could be a hash mismatch / corrupted download.
-		echo This could also be a python issue. Attach this screenshot when filing a bug report!
-		echo Output of whereis python - $(whereis python)
-		echo Output of which python - $(which python)
-		echo Output of python version - $(python -V)
-
+		echo "Waydroid did not initialize correctly."
+		echo "This could be a hash mismatch or corrupted download."
+		echo "Python diagnostics:"
+		echo "  whereis python: $(whereis python)"
+		echo "  which python:   $(which python)"
+		echo "  python version: $(python -V 2>&1)"
 		cleanup_exit
 	fi
 }
