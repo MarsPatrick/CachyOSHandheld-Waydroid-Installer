@@ -30,8 +30,17 @@ cleanup_exit () {
 	# Note: linux-cachyos-deckify-headers kept intentionally (was pre-existing or needed for other things)
 	echo -e "$current_password\n" | sudo -S pacman -R --noconfirm \
 		libglibutil libgbinder python-gbinder waydroid \
-		wlroots cage wlr-randr binder_linux-dkms \
-		fakeroot debugedit dkms &> /dev/null
+		wlroots cage wlr-randr &> /dev/null
+
+	# Unmount binderfs and remove symlinks
+	echo -e "$current_password\n" | sudo -S rm -f /dev/binder /dev/hwbinder /dev/vndbinder &> /dev/null
+	echo -e "$current_password\n" | sudo -S umount /dev/binderfs &> /dev/null
+	echo -e "$current_password\n" | sudo -S rm -rf /dev/binderfs &> /dev/null
+
+	# Disable and remove waydroid-binder service
+	echo -e "$current_password\n" | sudo -S systemctl disable waydroid-binder.service &> /dev/null
+	echo -e "$current_password\n" | sudo -S rm -f /etc/systemd/system/waydroid-binder.service &> /dev/null
+	echo -e "$current_password\n" | sudo -S systemctl daemon-reload &> /dev/null
 
 	# Unmount the custom /var/lib/waydroid
 	echo -e "$current_password\n" | sudo -S umount /var/lib/waydroid &> /dev/null

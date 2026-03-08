@@ -19,12 +19,6 @@ CURRENT_HOME=$(eval echo "~$CURRENT_USER")
 WAYDROID_SCRIPT=https://github.com/casualsnek/waydroid_script.git
 WAYDROID_SCRIPT_DIR=$(mktemp -d)/waydroid_script
 
-BINDER_AUR=https://aur.archlinux.org/binder_linux-dkms.git
-BINDER_GITHUB=https://github.com/archlinux/aur.git
-BINDER_DIR=$(mktemp -d)/aur_binder
-
-KERNEL_HEADERS="linux-cachyos-deckify-headers"
-
 ARM_Choice=libhoudini
 
 # Android 13 TV builds
@@ -38,7 +32,7 @@ ANDROID13_IMG_HASH=aafdd4ef69e8a11d64ba02e881c1697d6a3ee4fa4c1fb97e33abc6da5f4bb
 
 cleanup_exit() {
     echo "Cleaning up temporary files..."
-    rm -rf "$BINDER_DIR" "$WAYDROID_SCRIPT_DIR"
+    rm -rf "$WAYDROID_SCRIPT_DIR"
     echo "Exiting."
     exit 1
 }
@@ -197,52 +191,40 @@ if [ $? -ne 0 ]; then
 fi
 echo "waydroid_script cloned OK."
 
-# ─── Binder kernel module ─────────────────────────────────────────────────────
+# ─── Binder via binderfs ──────────────────────────────────────────────────────
+# CachyOS deckify kernel has binder compiled in (not as a module).
+# Binder is exposed via binderfs - we mount it and create symlinks for Waydroid.
 
-echo "Checking binder module..."
-if lsmod | grep -q binder_linux; then
-    echo "Binder already loaded, skipping build."
-else
-    echo "Binder not found. Installing dependencies and building from source..."
-    echo "*** pacman install binder dependencies ***" > "$LOGFILE"
+echo "Setting up binder via binderfs..."
+echo "*** setup binderfs ***" >> "$LOGFILE"
 
-    echo -e "$current_password\n" | sudo -S pacman -S --noconfirm \
-        fakeroot debugedit dkms "$KERNEL_HEADERS" --overwrite "*" &>> "$LOGFILE"
-    if [ $? -ne 0 ]; then
-        echo "Error installing binder build dependencies."
-        cleanup_exit
-    fi
-
-    # Clone binder source
-    git clone "$BINDER_AUR" "$BINDER_DIR" &>/dev/null
-    if [ $? -ne 0 ]; then
-        echo "AUR clone failed, trying GitHub mirror..."
-        rm -rf "$BINDER_DIR"
-        git clone --branch binder_linux-dkms --single-branch "$BINDER_GITHUB" "$BINDER_DIR" &>/dev/null
-        if [ $? -ne 0 ]; then
-            echo "Both AUR and GitHub mirror failed for binder!"
-            cleanup_exit
-        fi
-    fi
-    echo "Binder source cloned OK."
-
-    echo "Building and installing binder module..."
-    echo "*** build binder ***" &>> "$LOGFILE"
-    cd "$BINDER_DIR" && makepkg -f &>> "$LOGFILE" && \
-        echo -e "$current_password\n" | sudo -S pacman -U --noconfirm binder_linux-dkms*.zst &>> "$LOGFILE" && \
-        echo -e "$current_password\n" | sudo -S modprobe binder_linux device=binder,hwbinder,vndbinder &>> "$LOGFILE"
-
-    if [ $? -ne 0 ]; then
-        echo "Error building binder module."
-        cleanup_exit
-    fi
-    echo "Binder module built and loaded OK."
-
-    # Persist binder across reboots
-    cd "$WORKING_DIR"
-    echo -e "$current_password\n" | sudo -S cp extras/waydroid_binder.conf /etc/modules-load.d/waydroid_binder.conf
-    echo -e "$current_password\n" | sudo -S cp extras/options-waydroid_binder.conf /etc/modprobe.d/waydroid_binder.conf
+# Mount binderfs
+echo -e "$current_password\n" | sudo -S mkdir -p /dev/binderfs
+echo -e "$current_password\n" | sudo -S mount -t binder binder /dev/binderfs &>> "$LOGFILE"
+if [ $? -ne 0 ]; then
+    echo "Error mounting binderfs. Check $LOGFILE for details."
+    cleanup_exit
 fi
+
+# Create hwbinder and vndbinder devices via binder-control
+echo -e "$current_password\n" | sudo -S bash -c \
+    'ls /dev/binderfs/hwbinder &>/dev/null || echo -n "hwbinder" > /dev/binderfs/binder-control'
+echo -e "$current_password\n" | sudo -S bash -c \
+    'ls /dev/binderfs/vndbinder &>/dev/null || echo -n "vndbinder" > /dev/binderfs/binder-control'
+
+# Create symlinks in /dev for Waydroid
+echo -e "$current_password\n" | sudo -S ln -sf /dev/binderfs/binder /dev/binder
+echo -e "$current_password\n" | sudo -S ln -sf /dev/binderfs/hwbinder /dev/hwbinder
+echo -e "$current_password\n" | sudo -S ln -sf /dev/binderfs/vndbinder /dev/vndbinder
+
+echo "Binder setup via binderfs OK."
+
+# Install systemd service to persist binderfs mount and symlinks across reboots
+echo "Installing waydroid-binder systemd service..."
+echo -e "$current_password\n" | sudo -S cp extras/waydroid-binder.service /etc/systemd/system/waydroid-binder.service
+echo -e "$current_password\n" | sudo -S systemctl daemon-reload
+echo -e "$current_password\n" | sudo -S systemctl enable waydroid-binder.service
+echo "waydroid-binder service installed and enabled."
 
 # ─── Install cage and wlr-randr ───────────────────────────────────────────────
 

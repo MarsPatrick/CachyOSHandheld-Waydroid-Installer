@@ -223,26 +223,18 @@ then
 
 		# Remove kernel module and waydroid packages
 		echo -e "$PASSWORD\n" | sudo -S pacman -R --noconfirm \
-			binder_linux-dkms fakeroot debugedit dkms \
 			libglibutil libgbinder python-gbinder waydroid \
 			wlroots cage wlr-randr &> /dev/null
 
-		# Delete waydroid directories and config
-		echo -e "$PASSWORD\n" | sudo -S rm -rf \
-			~/waydroid /var/lib/waydroid /usr/lib/waydroid \
-			/etc/waydroid-extra ~/AUR &> /dev/null
+		# Remove binderfs symlinks and unmount
+		echo -e "$PASSWORD\n" | sudo -S rm -f /dev/binder /dev/hwbinder /dev/vndbinder &> /dev/null
+		echo -e "$PASSWORD\n" | sudo -S umount /dev/binderfs &> /dev/null
+		echo -e "$PASSWORD\n" | sudo -S rm -rf /dev/binderfs &> /dev/null
 
-		# Delete waydroid scripts and sudoers
-		echo -e "$PASSWORD\n" | sudo -S rm -f \
-			/etc/sudoers.d/zzzzzzzz-waydroid \
-			/etc/modules-load.d/waydroid_binder.conf \
-			/etc/modprobe.d/waydroid_binder.conf \
-			/usr/bin/waydroid-startup-scripts \
-			/usr/bin/waydroid-shutdown-scripts &> /dev/null
-
-		# Delete desktop shortcut and Android_Waydroid folder
-		rm -f "$HOME/Desktop/Waydroid-Toolbox" &> /dev/null
-		rm -rf "$HOME/Android_Waydroid/" &> /dev/null
+		# Disable and remove waydroid-binder service
+		echo -e "$PASSWORD\n" | sudo -S systemctl disable waydroid-binder.service &> /dev/null
+		echo -e "$PASSWORD\n" | sudo -S rm -f /etc/systemd/system/waydroid-binder.service &> /dev/null
+		echo -e "$PASSWORD\n" | sudo -S systemctl daemon-reload &> /dev/null
 
 		zenity --warning --title "Waydroid Toolbox" \
 			--text "Waydroid has been uninstalled! Goodbye!" --width 600 --height 75
@@ -255,30 +247,18 @@ then
 
 		# Remove kernel module and waydroid packages
 		echo -e "$PASSWORD\n" | sudo -S pacman -R --noconfirm \
-			binder_linux-dkms fakeroot debugedit dkms \
 			libglibutil libgbinder python-gbinder waydroid \
 			wlroots cage wlr-randr &> /dev/null
 
-		# Delete waydroid directories, config and user data
-		echo -e "$PASSWORD\n" | sudo -S rm -rf \
-			~/waydroid /var/lib/waydroid /usr/lib/waydroid \
-			/etc/waydroid-extra \
-			~/.local/share/waydroid \
-			~/.local/share/applications/waydroid* \
-			~/AUR &> /dev/null
+		# Remove binderfs symlinks and unmount
+		echo -e "$PASSWORD\n" | sudo -S rm -f /dev/binder /dev/hwbinder /dev/vndbinder &> /dev/null
+		echo -e "$PASSWORD\n" | sudo -S umount /dev/binderfs &> /dev/null
+		echo -e "$PASSWORD\n" | sudo -S rm -rf /dev/binderfs &> /dev/null
 
-		# Delete waydroid scripts and sudoers
-		echo -e "$PASSWORD\n" | sudo -S rm -f \
-			/etc/sudoers.d/zzzzzzzz-waydroid \
-			/etc/modules-load.d/waydroid_binder.conf \
-			/etc/modprobe.d/waydroid_binder.conf \
-			/usr/bin/waydroid-startup-scripts \
-			/usr/bin/waydroid-shutdown-scripts &> /dev/null
-
-		# Delete desktop shortcuts and Android_Waydroid folder
-		rm -f "$HOME/Desktop/Waydroid-Toolbox" &> /dev/null
-		rm -f "$HOME/Desktop/Waydroid-Updater" &> /dev/null
-		rm -rf "$HOME/Android_Waydroid/" &> /dev/null
+		# Disable and remove waydroid-binder service
+		echo -e "$PASSWORD\n" | sudo -S systemctl disable waydroid-binder.service &> /dev/null
+		echo -e "$PASSWORD\n" | sudo -S rm -f /etc/systemd/system/waydroid-binder.service &> /dev/null
+		echo -e "$PASSWORD\n" | sudo -S systemctl daemon-reload &> /dev/null
 
 		zenity --warning --title "Waydroid Toolbox" \
 			--text "Waydroid and Android user data has been uninstalled! Goodbye!" --width 600 --height 75

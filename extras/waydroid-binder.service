@@ -1,0 +1,24 @@
+[Unit]
+Description=Mount binderfs and create Waydroid binder symlinks
+DefaultDependencies=no
+After=local-fs.target
+Before=waydroid-container.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+
+# Mount binderfs
+ExecStart=/bin/bash -c 'mkdir -p /dev/binderfs && mount -t binder binder /dev/binderfs || true'
+
+# Create binder devices if they don't exist
+ExecStart=/bin/bash -c 'ls /dev/binderfs/hwbinder &>/dev/null || echo -n "hwbinder" > /dev/binderfs/binder-control'
+ExecStart=/bin/bash -c 'ls /dev/binderfs/vndbinder &>/dev/null || echo -n "vndbinder" > /dev/binderfs/binder-control'
+
+# Create symlinks in /dev
+ExecStart=/bin/bash -c 'ln -sf /dev/binderfs/binder /dev/binder'
+ExecStart=/bin/bash -c 'ln -sf /dev/binderfs/hwbinder /dev/hwbinder'
+ExecStart=/bin/bash -c 'ln -sf /dev/binderfs/vndbinder /dev/vndbinder'
+
+[Install]
+WantedBy=multi-user.target
