@@ -24,9 +24,10 @@ else
 fi
 
 # sanity check - make sure there is enough free space in the home partition (at least 10GB)
+FREE_HOME=$(df /home --output=avail | tail -n1)
 echo "Checking if home partition has enough free space..."
 echo "Home partition has $FREE_HOME KB free."
-if [ $FREE_HOME -ge 10000000 ]
+if [ "$FREE_HOME" -ge 10000000 ]
 then
 	echo "Home partition has enough free space. Proceed to the next step."
 else
