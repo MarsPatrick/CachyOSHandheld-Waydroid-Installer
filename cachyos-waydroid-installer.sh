@@ -28,9 +28,26 @@ ANDROID13_TV_OTA=https://ota.supechicken666.dev
 ANDROID13_IMG=https://github.com/ryanrudolfoba/SteamOS-Waydroid-Installer/releases/download/Android13-PvZ2/lineage-20-20251210-UNOFFICIAL-10MinuteSteamDeckGamer-Waydroid.zip
 ANDROID13_IMG_HASH=aafdd4ef69e8a11d64ba02e881c1697d6a3ee4fa4c1fb97e33abc6da5f4bb6d4
 
-# ─── Load functions and sanity checks ─────────────────────────────────────────
+# ─── Load functions ───────────────────────────────────────────────────────────
 
 source functions.sh
+
+# ─── Password prompt (GUI) ────────────────────────────────────────────────────
+
+current_password=$(zenity --password --title "CachyOS Waydroid Installer" 2>/dev/null)
+if [ $? -ne 0 ] || [ -z "$current_password" ]; then
+    zenity --error --text="No password entered. Exiting." 2>/dev/null
+    exit 1
+fi
+
+echo -e "$current_password\n" | sudo -S -k ls &> /dev/null
+if [ $? -ne 0 ]; then
+    zenity --error --text="Sudo password is wrong! Re-run the script and enter the correct sudo password." 2>/dev/null
+    exit 1
+fi
+
+# ─── Sanity checks ────────────────────────────────────────────────────────────
+
 source sanity-checks.sh
 
 # ─── Detect existing installation ────────────────────────────────────────────

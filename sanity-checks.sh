@@ -37,21 +37,9 @@ else
 fi
 
 # sanity check - make sure sudo password is already set
-if [ "$(passwd --status $(whoami) | tr -s " " | cut -d " " -f 2)" == "P" ]
+if [ "$(passwd --status $(whoami) | tr -s " " | cut -d " " -f 2)" != "P" ]
 then
-	read -s -p "Please enter current sudo password: " current_password ; echo
-	echo "Checking if the sudo password is correct..."
-	echo -e "$current_password\n" | sudo -S -k ls &> /dev/null
-
-	if [ $? -eq 0 ]
-	then
-		echo "Sudo password is correct. Proceed to the next step."
-	else
-		echo "Sudo password is wrong! Re-run the script and enter the correct sudo password."
-		exit 1
-	fi
-else
-	echo "Sudo password is blank! Set a sudo password first and then re-run the script."
+	zenity --error --text="Sudo password is blank! Set a sudo password first and then re-run the script." 2>/dev/null
 	passwd
 	exit 1
 fi
@@ -68,7 +56,7 @@ then
 		echo "Decky Loader plugin loader service successfully disabled."
 		echo "It will be re-enabled once the script finishes, or you can reboot to re-activate it."
 	else
-		echo "Error stopping the Decky Loader plugin loader service. Exiting."
+		zenity --error --text="Error stopping the Decky Loader plugin loader service. Exiting." 2>/dev/null
 		exit 1
 	fi
 fi

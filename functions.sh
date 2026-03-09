@@ -8,18 +8,18 @@ mount_waydroid_var () {
 	echo -e "$current_password\n" | sudo -S umount /var/lib/waydroid &> /dev/null
 	echo -e "$current_password\n" | sudo -S losetup -d $(losetup | grep waydroid.img | cut -d " " -f1) &> /dev/null
 
-	# Step 1 - Decompress waydroid.img.gz
+	# Step 1 - Decompress waydroid.img.gz using absolute path
 	echo "Decompressing waydroid.img.gz..."
-	gunzip -k -f extras/waydroid.img.gz
+	gunzip -k -f "$WORKING_DIR/extras/waydroid.img.gz"
 	if [ $? -ne 0 ]; then
 		echo "Error decompressing waydroid.img.gz!"
 		return 1
 	fi
-	echo "Decompressed OK. Size: $(ls -lh extras/waydroid.img | awk '{print $5}')"
+	echo "Decompressed OK. Size: $(ls -lh $WORKING_DIR/extras/waydroid.img | awk '{print $5}')"
 
 	# Step 2 - Format as ext4
 	echo "Formatting waydroid.img as ext4..."
-	echo -e "$current_password\n" | sudo -S mkfs.ext4 -F extras/waydroid.img
+	echo -e "$current_password\n" | sudo -S mkfs.ext4 -F "$WORKING_DIR/extras/waydroid.img"
 	if [ $? -ne 0 ]; then
 		echo "Error formatting waydroid.img!"
 		return 1
@@ -28,7 +28,7 @@ mount_waydroid_var () {
 
 	# Step 3 - Attach loop device
 	echo "Attaching loop device..."
-	echo -e "$current_password\n" | sudo -S losetup --find extras/waydroid.img
+	echo -e "$current_password\n" | sudo -S losetup --find "$WORKING_DIR/extras/waydroid.img"
 	if [ $? -ne 0 ]; then
 		echo "Error attaching loop device!"
 		return 1
@@ -59,8 +59,6 @@ unmount_waydroid_var () {
 }
 
 cleanup_exit () {
-	# Call this function to perform cleanup when something goes wrong
-
 	echo "Something went wrong! Performing cleanup. Run the script again to install Waydroid."
 
 	# Remove installed packages
@@ -78,11 +76,9 @@ cleanup_exit () {
 	echo -e "$current_password\n" | sudo -S rm -f /etc/systemd/system/waydroid-binder.service &> /dev/null
 	echo -e "$current_password\n" | sudo -S systemctl daemon-reload &> /dev/null
 
-	# Unmount the custom /var/lib/waydroid
+	# Unmount and delete waydroid directories
 	echo -e "$current_password\n" | sudo -S umount /var/lib/waydroid &> /dev/null
 	echo -e "$current_password\n" | sudo -S losetup -d $(losetup | grep waydroid.img | cut -d " " -f1) &> /dev/null
-
-	# Delete waydroid directories and configs
 	echo -e "$current_password\n" | sudo -S rm -rf /var/lib/waydroid &> /dev/null
 	echo -e "$current_password\n" | sudo -S rm -f \
 		/etc/sudoers.d/zzzzzzzz-waydroid \
@@ -90,11 +86,9 @@ cleanup_exit () {
 		/etc/modprobe.d/waydroid_binder.conf &> /dev/null
 	echo -e "$current_password\n" | sudo -S rm -f /usr/bin/waydroid* &> /dev/null
 
-	# Delete desktop shortcuts
+	# Delete desktop shortcuts and Android_Waydroid folder
 	rm -f "$CURRENT_HOME/Desktop/Waydroid-Updater" &> /dev/null
 	rm -f "$CURRENT_HOME/Desktop/Waydroid-Toolbox" &> /dev/null
-
-	# Delete Android_Waydroid folder
 	rm -rf "$CURRENT_HOME/Android_Waydroid" &> /dev/null
 
 	# Re-enable Decky Loader if present
@@ -108,8 +102,6 @@ cleanup_exit () {
 }
 
 prepare_custom_image_location () {
-	# Call this when deploying a custom Android image
-	# Custom images need to be placed in /etc/waydroid-extra/images
 	echo -e "$current_password\n" | sudo -S mkdir -p /etc/waydroid-extra &> /dev/null
 	echo -e "$current_password\n" | sudo -S mkdir -p /var/lib/waydroid/custom &> /dev/null
 	echo -e "$current_password\n" | sudo -S ln -sf /var/lib/waydroid/custom \
@@ -141,8 +133,6 @@ download_image () {
 }
 
 apply_android_custom_config () {
-	# Apply custom config for controller detection, root and fingerprint spoof
-
 	# Append base props (controller config, disable root)
 	echo "" | sudo tee -a /var/lib/waydroid/waydroid_base.prop > /dev/null
 	cat extras/waydroid_base.prop | sudo tee -a /var/lib/waydroid/waydroid_base.prop > /dev/null
@@ -168,9 +158,6 @@ apply_android_custom_config () {
 }
 
 install_android_extras () {
-	# Install ARM translation layer (libhoudini/libndk) and widevine
-	# Uses casualsnek/aleasto waydroid_script via Python venv
-
 	python3 -m venv "$WAYDROID_SCRIPT_DIR/venv"
 	"$WAYDROID_SCRIPT_DIR/venv/bin/pip" install -r "$WAYDROID_SCRIPT_DIR/requirements.txt" &> /dev/null
 
@@ -184,9 +171,6 @@ install_android_extras () {
 }
 
 install_android_extras_custom () {
-	# Install ARM translation layer, widevine AND GAPPS
-	# Use this for custom Android images (A13_CUSTOM)
-
 	python3 -m venv "$WAYDROID_SCRIPT_DIR/venv"
 	"$WAYDROID_SCRIPT_DIR/venv/bin/pip" install -r "$WAYDROID_SCRIPT_DIR/requirements.txt" &> /dev/null
 
@@ -200,7 +184,6 @@ install_android_extras_custom () {
 }
 
 check_waydroid_init () {
-	# Check if waydroid initialization completed without errors
 	if [ $? -eq 0 ]; then
 		echo "Waydroid initialization completed without errors!"
 	else
@@ -220,7 +203,6 @@ uninstall_waydroid () {
 	echo -e "$current_password\n" | sudo -S waydroid session stop &>/dev/null
 	echo -e "$current_password\n" | sudo -S pacman -Rns --noconfirm waydroid python-gbinder libgbinder libglibutil &>/dev/null
 
-	# Unmount /var/lib/waydroid
 	unmount_waydroid_var
 
 	# Remove binderfs symlinks and unmount
