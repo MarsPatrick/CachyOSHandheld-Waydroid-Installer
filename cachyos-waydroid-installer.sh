@@ -95,6 +95,20 @@ if [ $? -ne 0 ]; then
 fi
 echo "waydroid_script cloned OK."
 
+# ─── Loop device setup ───────────────────────────────────────────────────────
+# loop is compiled as module in cachyos-deckify but not autoloaded
+
+echo "Setting up loop module..."
+echo -e "$current_password
+" | sudo -S depmod -a &>> "$LOGFILE"
+echo -e "$current_password
+" | sudo -S modprobe loop &>> "$LOGFILE"
+if [ $? -ne 0 ]; then
+    echo "Error loading loop module. Check $LOGFILE for details."
+    cleanup_exit
+fi
+echo "Loop module loaded OK."
+
 # ─── Binder via binderfs ──────────────────────────────────────────────────────
 # CachyOS deckify kernel has binder compiled in (not as a module).
 # Binder is exposed via binderfs - we mount it and create symlinks for Waydroid.

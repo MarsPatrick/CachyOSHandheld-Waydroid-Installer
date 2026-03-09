@@ -8,6 +8,10 @@ Before=waydroid-container.service
 Type=oneshot
 RemainAfterExit=yes
 
+# Load loop module
+ExecStart=/sbin/depmod -a
+ExecStart=/sbin/modprobe loop
+
 # Mount binderfs
 ExecStart=/bin/bash -c 'mkdir -p /dev/binderfs && mount -t binder binder /dev/binderfs || true'
 
