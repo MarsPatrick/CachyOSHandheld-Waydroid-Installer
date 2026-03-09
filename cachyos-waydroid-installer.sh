@@ -28,129 +28,10 @@ ANDROID13_TV_OTA=https://ota.supechicken666.dev
 ANDROID13_IMG=https://github.com/ryanrudolfoba/SteamOS-Waydroid-Installer/releases/download/Android13-PvZ2/lineage-20-20251210-UNOFFICIAL-10MinuteSteamDeckGamer-Waydroid.zip
 ANDROID13_IMG_HASH=aafdd4ef69e8a11d64ba02e881c1697d6a3ee4fa4c1fb97e33abc6da5f4bb6d4
 
-# ─── Functions ────────────────────────────────────────────────────────────────
+# ─── Load functions and sanity checks ─────────────────────────────────────────
 
-cleanup_exit() {
-    echo "Cleaning up temporary files..."
-    rm -rf "$WAYDROID_SCRIPT_DIR"
-    echo "Exiting."
-    exit 1
-}
-
-check_waydroid_init() {
-    if [ $? -eq 0 ]; then
-        echo "Waydroid initialized successfully!"
-    else
-        echo "Error initializing Waydroid. Check $LOGFILE for details."
-        cleanup_exit
-    fi
-}
-
-mount_waydroid_var() {
-    # Create a persistent img for /var/lib/waydroid so it survives updates
-    if [ ! -f "$CURRENT_HOME/Android_Waydroid/waydroid.img" ]; then
-        echo "Creating waydroid.img (4GB)..."
-        dd if=/dev/zero of="$CURRENT_HOME/Android_Waydroid/waydroid.img" bs=1M count=4096 status=progress
-        mkfs.ext4 "$CURRENT_HOME/Android_Waydroid/waydroid.img"
-    fi
-    echo -e "$current_password\n" | sudo -S mount -o loop \
-        "$CURRENT_HOME/Android_Waydroid/waydroid.img" /var/lib/waydroid
-}
-
-unmount_waydroid_var() {
-    echo -e "$current_password\n" | sudo -S umount /var/lib/waydroid
-}
-
-install_android_extras() {
-    cd "$WAYDROID_SCRIPT_DIR"
-    echo -e "$current_password\n" | sudo -S python3 main.py install \
-        --install-hooks libndk "$ARM_Choice" widevine 2>&1 | tee -a "$LOGFILE"
-}
-
-install_android_extras_custom() {
-    cd "$WAYDROID_SCRIPT_DIR"
-    echo -e "$current_password\n" | sudo -S python3 main.py install \
-        --install-hooks libndk "$ARM_Choice" widevine 2>&1 | tee -a "$LOGFILE"
-}
-
-apply_android_custom_config() {
-    echo -e "$current_password\n" | sudo -S sed -i \
-        "s/ro.hardware.gralloc=.*/ro.hardware.gralloc=minigbm_gbm_mesa/g" \
-        /var/lib/waydroid/waydroid_base.prop
-}
-
-prepare_custom_image_location() {
-    echo -e "$current_password\n" | sudo -S mkdir -p /etc/waydroid-extra
-    echo -e "$current_password\n" | sudo -S mkdir -p /var/lib/waydroid/custom
-    echo -e "$current_password\n" | sudo -S ln -sf /var/lib/waydroid/custom \
-        /etc/waydroid-extra/images
-}
-
-download_image() {
-    local url=$1
-    local hash=$2
-    local dest_dir=$3
-    local label=$4
-
-    echo "Downloading $label..."
-    local filename=$(basename "$url")
-    echo -e "$current_password\n" | sudo -S wget -q --show-progress "$url" -O "$dest_dir/$filename"
-
-    echo "Verifying hash..."
-    local actual_hash=$(sha256sum "$dest_dir/$filename" | cut -d' ' -f1)
-    if [ "$actual_hash" != "$hash" ]; then
-        echo "Hash mismatch! Download may be corrupted."
-        cleanup_exit
-    fi
-    echo "Hash verified OK."
-
-    echo "Extracting image..."
-    echo -e "$current_password\n" | sudo -S unzip -o "$dest_dir/$filename" -d "$dest_dir"
-}
-
-uninstall_waydroid() {
-    echo "Uninstalling existing Waydroid installation..."
-    echo -e "$current_password\n" | sudo -S systemctl stop waydroid-container.service 2>/dev/null
-    echo -e "$current_password\n" | sudo -S waydroid session stop 2>/dev/null
-    echo -e "$current_password\n" | sudo -S pacman -Rns --noconfirm waydroid python-gbinder libgbinder libglibutil 2>/dev/null
-    unmount_waydroid_var 2>/dev/null
-    echo -e "$current_password\n" | sudo -S rm -rf /var/lib/waydroid /etc/waydroid-extra
-    rm -rf "$CURRENT_HOME/Android_Waydroid"
-    rm -f "$CURRENT_HOME/Desktop/Waydroid-Toolbox" "$CURRENT_HOME/Desktop/Waydroid-Updater"
-    echo "Waydroid has been uninstalled."
-}
-
-# ─── Password prompt ──────────────────────────────────────────────────────────
-
-current_password=$(zenity --password --title "CachyOS Waydroid Installer" 2>/dev/null)
-if [ $? -ne 0 ] || [ -z "$current_password" ]; then
-    echo "No password entered. Exiting."
-    exit 1
-fi
-
-# Validate sudo password
-echo -e "$current_password\n" | sudo -S echo "Password OK" 2>/dev/null
-if [ $? -ne 0 ]; then
-    zenity --error --text="Incorrect password. Exiting." 2>/dev/null
-    exit 1
-fi
-
-# ─── Sanity checks ────────────────────────────────────────────────────────────
-
-# Check free space (need at least 8GB in /home)
-FREE_HOME=$(df /home --output=avail | tail -n1)
-if [ "$FREE_HOME" -lt 8388608 ]; then
-    zenity --error --text="Not enough free space in /home. Need at least 8GB." 2>/dev/null
-    exit 1
-fi
-
-# Check internet
-echo "Checking internet connection..."
-ping -c 1 google.com &>/dev/null
-if [ $? -ne 0 ]; then
-    zenity --error --text="No internet connection detected. Exiting." 2>/dev/null
-    exit 1
-fi
+source functions.sh
+source sanity-checks.sh
 
 # ─── Detect existing installation ────────────────────────────────────────────
 
@@ -198,7 +79,6 @@ echo "waydroid_script cloned OK."
 echo "Setting up binder via binderfs..."
 echo "*** setup binderfs ***" >> "$LOGFILE"
 
-# Mount binderfs
 echo -e "$current_password\n" | sudo -S mkdir -p /dev/binderfs
 echo -e "$current_password\n" | sudo -S mount -t binder binder /dev/binderfs &>> "$LOGFILE"
 if [ $? -ne 0 ]; then
@@ -206,20 +86,17 @@ if [ $? -ne 0 ]; then
     cleanup_exit
 fi
 
-# Create hwbinder and vndbinder devices via binder-control
 echo -e "$current_password\n" | sudo -S bash -c \
     'ls /dev/binderfs/hwbinder &>/dev/null || echo -n "hwbinder" > /dev/binderfs/binder-control'
 echo -e "$current_password\n" | sudo -S bash -c \
     'ls /dev/binderfs/vndbinder &>/dev/null || echo -n "vndbinder" > /dev/binderfs/binder-control'
 
-# Create symlinks in /dev for Waydroid
 echo -e "$current_password\n" | sudo -S ln -sf /dev/binderfs/binder /dev/binder
 echo -e "$current_password\n" | sudo -S ln -sf /dev/binderfs/hwbinder /dev/hwbinder
 echo -e "$current_password\n" | sudo -S ln -sf /dev/binderfs/vndbinder /dev/vndbinder
 
 echo "Binder setup via binderfs OK."
 
-# Install systemd service to persist binderfs mount and symlinks across reboots
 echo "Installing waydroid-binder systemd service..."
 echo -e "$current_password\n" | sudo -S cp extras/waydroid-binder.service /etc/systemd/system/waydroid-binder.service
 echo -e "$current_password\n" | sudo -S systemctl daemon-reload
@@ -240,7 +117,7 @@ echo "System upgrade completed OK."
 # ─── Install cage and wlr-randr ───────────────────────────────────────────────
 
 echo "Installing cage and wlr-randr..."
-echo "*** pacman install cage wlr-randr ***" &>> "$LOGFILE"
+echo "*** pacman install cage wlr-randr ***" >> "$LOGFILE"
 echo -e "$current_password\n" | sudo -S pacman -S --noconfirm cage wlr-randr &>> "$LOGFILE"
 if [ $? -ne 0 ]; then
     echo "Error installing cage/wlr-randr."
@@ -251,12 +128,11 @@ echo "cage and wlr-randr installed OK."
 # ─── Install Waydroid ─────────────────────────────────────────────────────────
 
 echo "Installing Waydroid..."
-echo "*** install waydroid ***" &>> "$LOGFILE"
+echo "*** install waydroid ***" >> "$LOGFILE"
 
 if [ "$WAYDROID_SOURCE" == "PACMAN" ]; then
     echo -e "$current_password\n" | sudo -S pacman -S --noconfirm waydroid &>> "$LOGFILE"
 else
-    # ZST precompiled packages from ryanrudolfoba's repo
     cd "$WORKING_DIR"
     echo -e "$current_password\n" | sudo -S pacman -U --noconfirm \
         waydroid/libgbinder*.zst \
@@ -286,7 +162,6 @@ echo "Firewall configured."
 
 mkdir -p "$CURRENT_HOME/Android_Waydroid/extras"
 
-# Waydroid startup/shutdown scripts
 echo -e "$current_password\n" | sudo -S cp extras/waydroid-startup-scripts /usr/bin/waydroid-startup-scripts
 echo -e "$current_password\n" | sudo -S cp extras/waydroid-shutdown-scripts /usr/bin/waydroid-shutdown-scripts
 echo -e "$current_password\n" | sudo -S cp extras/waydroid-mount /usr/bin/waydroid-mount
@@ -297,11 +172,9 @@ echo -e "$current_password\n" | sudo -S chmod +x \
     /usr/bin/waydroid-mount \
     /usr/bin/waydroid-firewall
 
-# Custom sudoers (no sudo prompt for waydroid scripts)
 echo -e "$current_password\n" | sudo -S cp extras/zzzzzzzz-waydroid /etc/sudoers.d/zzzzzzzz-waydroid
 echo -e "$current_password\n" | sudo -S chown root:root /etc/sudoers.d/zzzzzzzz-waydroid
 
-# Launcher, toolbox, updater
 cp extras/Android_Waydroid_Cage.sh \
     extras/Waydroid-Toolbox.sh \
     extras/Waydroid-Updater.sh \
@@ -310,12 +183,10 @@ cp extras/Android_Waydroid_Cage.sh \
     "$CURRENT_HOME/Android_Waydroid"
 chmod +x "$CURRENT_HOME/Android_Waydroid"/*.sh
 
-# Dolphin File Manager root extension
 mkdir -p "$CURRENT_HOME/.local/share/kio/servicemenus"
 cp extras/open_as_root.desktop "$CURRENT_HOME/.local/share/kio/servicemenus"
 chmod +x "$CURRENT_HOME/.local/share/kio/servicemenus/open_as_root.desktop"
 
-# Desktop shortcuts
 ln -sf "$CURRENT_HOME/Android_Waydroid/Waydroid-Toolbox.sh" "$CURRENT_HOME/Desktop/Waydroid-Toolbox"
 ln -sf "$CURRENT_HOME/Android_Waydroid/Waydroid-Updater.sh" "$CURRENT_HOME/Desktop/Waydroid-Updater"
 
@@ -332,17 +203,14 @@ echo "/var/lib/waydroid mounted OK."
 
 # ─── Overlay files ────────────────────────────────────────────────────────────
 
-# Steam Controller key layout fix
 echo -e "$current_password\n" | sudo -S mkdir -p /var/lib/waydroid/overlay/system/usr/keylayout
 echo -e "$current_password\n" | sudo -S cp extras/Vendor_28de_Product_11ff.kl \
     /var/lib/waydroid/overlay/system/usr/keylayout/
 
-# Audio latency patch
 echo -e "$current_password\n" | sudo -S mkdir -p /var/lib/waydroid/overlay/system/etc/init
 echo -e "$current_password\n" | sudo -S cp extras/audio.rc \
     /var/lib/waydroid/overlay/system/etc/init/
 
-# Ad/malware/tracking block via custom hosts
 echo -e "$current_password\n" | sudo -S wget -q \
     https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/fakenews-gambling-porn/hosts \
     -O /var/lib/waydroid/overlay/system/etc/hosts
@@ -404,10 +272,6 @@ esac
 
 # ─── ARM translation, widevine, fingerprint ───────────────────────────────────
 
-cd "$WAYDROID_SCRIPT_DIR"
-echo -e "$current_password\n" | sudo -S python3 main.py install \
-    --install-hooks &>> "$LOGFILE"
-
 case "$Android_Choice" in
     TV13_GAPPS|TV13_NO_GAPPS)
         echo "TV13 images already include libhoudini and widevine. Skipping."
@@ -448,10 +312,8 @@ sleep 3
 rm -f "$TMP_DESKTOP"
 echo "Waydroid shortcut added to Game Mode."
 
-# Create icon
 python3 extras/icon.py
 
-# Add steamos-nested-desktop to Game Mode
 steamos-add-to-steam /usr/bin/steamos-nested-desktop &>/dev/null
 sleep 3
 echo "steamos-nested-desktop shortcut added to Game Mode."

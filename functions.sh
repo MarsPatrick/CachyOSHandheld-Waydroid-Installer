@@ -213,3 +213,36 @@ check_waydroid_init () {
 		cleanup_exit
 	fi
 }
+
+uninstall_waydroid () {
+	echo "Uninstalling existing Waydroid installation..."
+	echo -e "$current_password\n" | sudo -S systemctl stop waydroid-container.service &>/dev/null
+	echo -e "$current_password\n" | sudo -S waydroid session stop &>/dev/null
+	echo -e "$current_password\n" | sudo -S pacman -Rns --noconfirm waydroid python-gbinder libgbinder libglibutil &>/dev/null
+
+	# Unmount /var/lib/waydroid
+	unmount_waydroid_var
+
+	# Remove binderfs symlinks and unmount
+	echo -e "$current_password\n" | sudo -S rm -f /dev/binder /dev/hwbinder /dev/vndbinder &>/dev/null
+	echo -e "$current_password\n" | sudo -S umount /dev/binderfs &>/dev/null
+	echo -e "$current_password\n" | sudo -S rm -rf /dev/binderfs &>/dev/null
+
+	# Disable and remove waydroid-binder service
+	echo -e "$current_password\n" | sudo -S systemctl disable waydroid-binder.service &>/dev/null
+	echo -e "$current_password\n" | sudo -S rm -f /etc/systemd/system/waydroid-binder.service &>/dev/null
+	echo -e "$current_password\n" | sudo -S systemctl daemon-reload &>/dev/null
+
+	# Delete waydroid directories and configs
+	echo -e "$current_password\n" | sudo -S rm -rf /var/lib/waydroid /etc/waydroid-extra &>/dev/null
+	echo -e "$current_password\n" | sudo -S rm -f \
+		/etc/sudoers.d/zzzzzzzz-waydroid \
+		/usr/bin/waydroid-startup-scripts \
+		/usr/bin/waydroid-shutdown-scripts \
+		/usr/bin/waydroid-mount \
+		/usr/bin/waydroid-firewall &>/dev/null
+
+	rm -rf "$CURRENT_HOME/Android_Waydroid" &>/dev/null
+	rm -f "$CURRENT_HOME/Desktop/Waydroid-Toolbox" "$CURRENT_HOME/Desktop/Waydroid-Updater" &>/dev/null
+	echo "Waydroid has been uninstalled."
+}
