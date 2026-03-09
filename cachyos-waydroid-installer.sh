@@ -52,6 +52,17 @@ while true; do
     fi
 done
 
+# ─── System upgrade ───────────────────────────────────────────────────────────
+
+echo "Performing full system upgrade..."
+echo "*** pacman -Syu ***" >> "$LOGFILE"
+echo -e "$current_password\n" | sudo -S pacman -Syu --noconfirm &>> "$LOGFILE"
+if [ $? -ne 0 ]; then
+    echo "Error during system upgrade. Check $LOGFILE for details."
+    cleanup_exit
+fi
+echo "System upgrade completed OK."
+
 # ─── Sanity checks ────────────────────────────────────────────────────────────
 
 source sanity-checks.sh
@@ -99,10 +110,8 @@ echo "waydroid_script cloned OK."
 # loop is compiled as module in cachyos-deckify but not autoloaded
 
 echo "Setting up loop module..."
-echo -e "$current_password
-" | sudo -S depmod -a &>> "$LOGFILE"
-echo -e "$current_password
-" | sudo -S modprobe loop &>> "$LOGFILE"
+echo -e "$current_password\n" | sudo -S depmod -a &>> "$LOGFILE"
+echo -e "$current_password\n" | sudo -S modprobe loop &>> "$LOGFILE"
 if [ $? -ne 0 ]; then
     echo "Error loading loop module. Check $LOGFILE for details."
     cleanup_exit
@@ -110,8 +119,6 @@ fi
 echo "Loop module loaded OK."
 
 # ─── Binder via binderfs ──────────────────────────────────────────────────────
-# CachyOS deckify kernel has binder compiled in (not as a module).
-# Binder is exposed via binderfs - we mount it and create symlinks for Waydroid.
 
 echo "Setting up binder via binderfs..."
 echo "*** setup binderfs ***" >> "$LOGFILE"
@@ -139,17 +146,6 @@ echo -e "$current_password\n" | sudo -S cp extras/waydroid-binder.service /etc/s
 echo -e "$current_password\n" | sudo -S systemctl daemon-reload
 echo -e "$current_password\n" | sudo -S systemctl enable waydroid-binder.service
 echo "waydroid-binder service installed and enabled."
-
-# ─── System upgrade ───────────────────────────────────────────────────────────
-
-echo "Performing full system upgrade before installing packages..."
-echo "*** pacman -Syu ***" >> "$LOGFILE"
-echo -e "$current_password\n" | sudo -S pacman -Syu --noconfirm &>> "$LOGFILE"
-if [ $? -ne 0 ]; then
-    echo "Error during system upgrade. Check $LOGFILE for details."
-    cleanup_exit
-fi
-echo "System upgrade completed OK."
 
 # ─── Install cage and wlr-randr ───────────────────────────────────────────────
 
@@ -182,8 +178,24 @@ if [ $? -ne 0 ]; then
     echo "Error installing Waydroid."
     cleanup_exit
 fi
-
 echo "Waydroid installed OK."
+
+# ─── Install python-gbinder ───────────────────────────────────────────────────
+# Must be installed AFTER waydroid to ensure correct version for current Python
+
+echo "Installing python-gbinder..."
+echo -e "$current_password\n" | sudo -S pacman -S --noconfirm python-gbinder &>> "$LOGFILE"
+
+echo "Verifying python-gbinder import..."
+python -c "import gbinder" 2>/dev/null || python3 -c "import gbinder" 2>/dev/null
+if [ $? -ne 0 ]; then
+    echo "ERROR: python-gbinder not importable!"
+    echo "python version: $(python --version 2>&1)"
+    echo "python-gbinder version: $(pacman -Qi python-gbinder 2>&1 | grep Version)"
+    cleanup_exit
+fi
+echo "python-gbinder import OK."
+
 echo -e "$current_password\n" | sudo -S systemctl disable waydroid-container.service
 
 # ─── Firewall config (ufw) ────────────────────────────────────────────────────
