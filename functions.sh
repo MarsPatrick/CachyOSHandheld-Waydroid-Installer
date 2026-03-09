@@ -26,9 +26,18 @@ mount_waydroid_var () {
 	fi
 	echo "Format OK."
 
-	# Step 3 - Mount directly using loop, no losetup needed
+	# Step 3 - Diagnostics before mount
+	echo "=== DIAGNOSTICS ==="
+	echo "waydroid.img exists: $(ls -lh $WORKING_DIR/extras/waydroid.img 2>&1)"
+	echo "waydroid.img sudo visible: $(echo -e "$current_password\n" | sudo -S ls -lh $WORKING_DIR/extras/waydroid.img 2>&1)"
+	echo "/var/lib/waydroid status: $(ls -la /var/lib/waydroid 2>&1)"
+	echo "/var/lib/waydroid sudo status: $(echo -e "$current_password\n" | sudo -S ls -la /var/lib/waydroid 2>&1)"
+	echo "file type: $(file $WORKING_DIR/extras/waydroid.img 2>&1)"
+	echo "=== END DIAGNOSTICS ==="
+
+	# Step 4 - Mount directly using loop, no losetup needed
 	echo "Mounting waydroid.img to /var/lib/waydroid..."
-	echo -e "$current_password\n" | sudo -S mount -o loop,rw "$WORKING_DIR/extras/waydroid.img" /var/lib/waydroid
+	echo -e "$current_password\n" | sudo -S mount -v -o loop,rw "$WORKING_DIR/extras/waydroid.img" /var/lib/waydroid 2>&1
 	if [ $? -ne 0 ]; then
 		echo "Error mounting waydroid.img!"
 		return 1
