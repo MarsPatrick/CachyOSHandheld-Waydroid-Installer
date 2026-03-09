@@ -39,8 +39,7 @@ fi
 # sanity check - make sure sudo password is already set
 if [ "$(passwd --status $(whoami) | tr -s " " | cut -d " " -f 2)" != "P" ]
 then
-	zenity --error --text="Sudo password is blank! Set a sudo password first and then re-run the script." 2>/dev/null
-	passwd
+	zenity --error --text="Sudo password is blank!\n\nOpen a terminal and run 'passwd' to set a sudo password first, then re-run the script." 2>/dev/null
 	exit 1
 fi
 

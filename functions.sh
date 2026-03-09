@@ -26,23 +26,23 @@ mount_waydroid_var () {
 	fi
 	echo "Format OK."
 
-	# Step 3 - Attach loop device
+	# Step 3 - Attach loop device and get its name in one command
 	echo "Attaching loop device..."
-	echo -e "$current_password\n" | sudo -S losetup --find "$WORKING_DIR/extras/waydroid.img"
-	if [ $? -ne 0 ]; then
-		echo "Error attaching loop device!"
-		return 1
-	fi
-
-	# Step 4 - Get loop device name
-	ROOTDEV=$(echo -e "$current_password\n" | sudo -S losetup --list -O NAME,BACK-FILE | grep waydroid.img | awk '{print $1}')
+	ROOTDEV=$(echo -e "$current_password\n" | sudo -S losetup --find --show "$WORKING_DIR/extras/waydroid.img" 2>/dev/null)
 	if [ -z "$ROOTDEV" ]; then
-		echo "Error: could not find loop device for waydroid.img!"
-		return 1
+		# fallback: try mounting directly with -o loop
+		echo "losetup --find --show failed, trying direct mount..."
+		echo -e "$current_password\n" | sudo -S mount -o loop "$WORKING_DIR/extras/waydroid.img" /var/lib/waydroid
+		if [ $? -ne 0 ]; then
+			echo "Error mounting waydroid.img!"
+			return 1
+		fi
+		echo "Mounted OK via direct loop mount."
+		return 0
 	fi
 	echo "Loop device: $ROOTDEV"
 
-	# Step 5 - Mount
+	# Step 4 - Mount
 	echo "Mounting $ROOTDEV to /var/lib/waydroid..."
 	echo -e "$current_password\n" | sudo -S mount "$ROOTDEV" /var/lib/waydroid
 	if [ $? -ne 0 ]; then
