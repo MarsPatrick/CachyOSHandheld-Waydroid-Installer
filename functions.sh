@@ -6,7 +6,12 @@ mount_waydroid_var () {
 	# Initialize and configure custom /var/lib/waydroid
 	# First make sure /var/lib/waydroid is not already mounted
 	echo -e "$current_password\n" | sudo -S umount /var/lib/waydroid &> /dev/null
-	echo -e "$current_password\n" | sudo -S losetup -d $(losetup | grep waydroid.img | cut -d " " -f1) &> /dev/null
+
+	# Detach any existing loop device for waydroid.img
+	OLDLOOP=$(echo -e "$current_password\n" | sudo -S losetup -j "$WORKING_DIR/extras/waydroid.img" 2>/dev/null | cut -d: -f1)
+	if [ -n "$OLDLOOP" ]; then
+		echo -e "$current_password\n" | sudo -S losetup -d "$OLDLOOP" &> /dev/null
+	fi
 
 	# Step 1 - Decompress waydroid.img.gz using absolute path
 	echo "Decompressing waydroid.img.gz..."
@@ -26,27 +31,34 @@ mount_waydroid_var () {
 	fi
 	echo "Format OK."
 
-	# Step 3 - loop is built into the kernel, find a free loop device manually
-	echo "Finding free loop device..."
-	echo "Available loop devices: $(ls /dev/loop* 2>&1)"
+	# Step 3 - Create loop devices if missing (loop is built into kernel)
+	echo "Checking loop devices..."
+	if [ ! -e /dev/loop0 ]; then
+		echo "No loop devices found, creating them..."
+		echo -e "$current_password\n" | sudo -S mknod /dev/loop0 b 7 0
+		echo -e "$current_password\n" | sudo -S mknod /dev/loop1 b 7 1
+		echo -e "$current_password\n" | sudo -S mknod /dev/loop2 b 7 2
+		echo -e "$current_password\n" | sudo -S chmod 660 /dev/loop0 /dev/loop1 /dev/loop2
+	fi
+	echo "Loop devices: $(ls /dev/loop* 2>&1)"
 
+	# Step 4 - Find free loop device and attach image
 	LOOPDEV=$(echo -e "$current_password\n" | sudo -S losetup -f 2>/dev/null)
 	if [ -z "$LOOPDEV" ]; then
-		echo "No free loop device found via losetup -f, trying /dev/loop0..."
-		LOOPDEV=/dev/loop0
+		echo "Error: no free loop device available!"
+		return 1
 	fi
 	echo "Using loop device: $LOOPDEV"
 
-	# Step 4 - Attach image to loop device
-	echo -e "$current_password\n" | sudo -S losetup "$LOOPDEV" "$WORKING_DIR/extras/waydroid.img" 2>&1
+	echo -e "$current_password\n" | sudo -S losetup "$LOOPDEV" "$WORKING_DIR/extras/waydroid.img"
 	if [ $? -ne 0 ]; then
-		echo "Error attaching loop device!"
+		echo "Error attaching $LOOPDEV!"
 		return 1
 	fi
 
 	# Step 5 - Mount loop device
 	echo "Mounting $LOOPDEV to /var/lib/waydroid..."
-	echo -e "$current_password\n" | sudo -S mount -v "$LOOPDEV" /var/lib/waydroid 2>&1
+	echo -e "$current_password\n" | sudo -S mount "$LOOPDEV" /var/lib/waydroid
 	if [ $? -ne 0 ]; then
 		echo "Error mounting $LOOPDEV to /var/lib/waydroid!"
 		echo -e "$current_password\n" | sudo -S losetup -d "$LOOPDEV" 2>/dev/null
@@ -58,7 +70,7 @@ mount_waydroid_var () {
 unmount_waydroid_var () {
 	# Unmount the custom /var/lib/waydroid
 	echo -e "$current_password\n" | sudo -S umount /var/lib/waydroid &> /dev/null
-	# Detach any loop device associated with waydroid.img
+	# Detach loop device associated with waydroid.img
 	LOOPDEV=$(echo -e "$current_password\n" | sudo -S losetup -j "$WORKING_DIR/extras/waydroid.img" 2>/dev/null | cut -d: -f1)
 	if [ -n "$LOOPDEV" ]; then
 		echo -e "$current_password\n" | sudo -S losetup -d "$LOOPDEV" &> /dev/null
@@ -88,8 +100,7 @@ cleanup_exit () {
 	echo -e "$current_password\n" | sudo -S systemctl daemon-reload &> /dev/null
 
 	# Unmount and delete waydroid directories
-	echo -e "$current_password\n" | sudo -S umount /var/lib/waydroid &> /dev/null
-	echo -e "$current_password\n" | sudo -S losetup -d $(losetup | grep waydroid.img | cut -d " " -f1) &> /dev/null
+	unmount_waydroid_var
 	echo -e "$current_password\n" | sudo -S rm -rf /var/lib/waydroid &> /dev/null
 	echo -e "$current_password\n" | sudo -S rm -f \
 		/etc/sudoers.d/zzzzzzzz-waydroid \

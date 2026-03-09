@@ -34,17 +34,23 @@ source functions.sh
 
 # ─── Password prompt (GUI) ────────────────────────────────────────────────────
 
-current_password=$(zenity --password --title "CachyOS Waydroid Installer" 2>/dev/null)
-if [ $? -ne 0 ] || [ -z "$current_password" ]; then
-    zenity --error --text="No password entered. Exiting." 2>/dev/null
-    exit 1
-fi
-
-echo -e "$current_password\n" | sudo -S -k ls &> /dev/null
-if [ $? -ne 0 ]; then
-    zenity --error --text="Sudo password is wrong! Re-run the script and enter the correct sudo password." 2>/dev/null
-    exit 1
-fi
+while true; do
+    current_password=$(zenity --password --title "CachyOS Waydroid Installer" 2>/dev/null)
+    if [ $? -ne 0 ]; then
+        zenity --error --text="Cancelled. Exiting." 2>/dev/null
+        exit 1
+    fi
+    if [ -z "$current_password" ]; then
+        zenity --error --text="Password cannot be empty. Please try again." 2>/dev/null
+        continue
+    fi
+    echo -e "$current_password\n" | sudo -S -k ls &> /dev/null
+    if [ $? -eq 0 ]; then
+        break
+    else
+        zenity --error --text="Sudo password is wrong! Please try again." 2>/dev/null
+    fi
+done
 
 # ─── Sanity checks ────────────────────────────────────────────────────────────
 
