@@ -26,17 +26,30 @@ mount_waydroid_var () {
 	fi
 	echo "Format OK."
 
-	# Step 3 - Load loop module and check devices
-	echo "Loading loop module..."
-	echo -e "$current_password\n" | sudo -S modprobe loop 2>&1
-	echo "Loop devices available: $(ls /dev/loop* 2>&1)"
-	echo "Loop module status: $(lsmod | grep loop 2>&1)"
+	# Step 3 - loop is built into the kernel, find a free loop device manually
+	echo "Finding free loop device..."
+	echo "Available loop devices: $(ls /dev/loop* 2>&1)"
 
-	# Step 4 - Mount directly using loop
-	echo "Mounting waydroid.img to /var/lib/waydroid..."
-	echo -e "$current_password\n" | sudo -S mount -v -o loop,rw "$WORKING_DIR/extras/waydroid.img" /var/lib/waydroid 2>&1
+	LOOPDEV=$(echo -e "$current_password\n" | sudo -S losetup -f 2>/dev/null)
+	if [ -z "$LOOPDEV" ]; then
+		echo "No free loop device found via losetup -f, trying /dev/loop0..."
+		LOOPDEV=/dev/loop0
+	fi
+	echo "Using loop device: $LOOPDEV"
+
+	# Step 4 - Attach image to loop device
+	echo -e "$current_password\n" | sudo -S losetup "$LOOPDEV" "$WORKING_DIR/extras/waydroid.img" 2>&1
 	if [ $? -ne 0 ]; then
-		echo "Error mounting waydroid.img!"
+		echo "Error attaching loop device!"
+		return 1
+	fi
+
+	# Step 5 - Mount loop device
+	echo "Mounting $LOOPDEV to /var/lib/waydroid..."
+	echo -e "$current_password\n" | sudo -S mount -v "$LOOPDEV" /var/lib/waydroid 2>&1
+	if [ $? -ne 0 ]; then
+		echo "Error mounting $LOOPDEV to /var/lib/waydroid!"
+		echo -e "$current_password\n" | sudo -S losetup -d "$LOOPDEV" 2>/dev/null
 		return 1
 	fi
 	echo "Mounted OK."
@@ -45,7 +58,15 @@ mount_waydroid_var () {
 unmount_waydroid_var () {
 	# Unmount the custom /var/lib/waydroid
 	echo -e "$current_password\n" | sudo -S umount /var/lib/waydroid &> /dev/null
-	echo -e "$current_password\n" | sudo -S losetup -d $(losetup | grep waydroid.img | cut -d " " -f1) &> /dev/null
+	# Detach any loop device associated with waydroid.img
+	LOOPDEV=$(echo -e "$current_password\n" | sudo -S losetup -j "$WORKING_DIR/extras/waydroid.img" 2>/dev/null | cut -d: -f1)
+	if [ -n "$LOOPDEV" ]; then
+		echo -e "$current_password\n" | sudo -S losetup -d "$LOOPDEV" &> /dev/null
+	fi
+	LOOPDEV2=$(echo -e "$current_password\n" | sudo -S losetup -j "$CURRENT_HOME/Android_Waydroid/waydroid.img" 2>/dev/null | cut -d: -f1)
+	if [ -n "$LOOPDEV2" ]; then
+		echo -e "$current_password\n" | sudo -S losetup -d "$LOOPDEV2" &> /dev/null
+	fi
 }
 
 cleanup_exit () {
