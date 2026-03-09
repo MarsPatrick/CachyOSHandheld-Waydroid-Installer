@@ -226,6 +226,17 @@ echo -e "$current_password\n" | sudo -S systemctl daemon-reload
 echo -e "$current_password\n" | sudo -S systemctl enable waydroid-binder.service
 echo "waydroid-binder service installed and enabled."
 
+# ─── System upgrade ───────────────────────────────────────────────────────────
+
+echo "Performing full system upgrade before installing packages..."
+echo "*** pacman -Syu ***" >> "$LOGFILE"
+echo -e "$current_password\n" | sudo -S pacman -Syu --noconfirm &>> "$LOGFILE"
+if [ $? -ne 0 ]; then
+    echo "Error during system upgrade. Check $LOGFILE for details."
+    cleanup_exit
+fi
+echo "System upgrade completed OK."
+
 # ─── Install cage and wlr-randr ───────────────────────────────────────────────
 
 echo "Installing cage and wlr-randr..."

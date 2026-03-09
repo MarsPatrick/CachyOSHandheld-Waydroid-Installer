@@ -8,11 +8,48 @@ mount_waydroid_var () {
 	echo -e "$current_password\n" | sudo -S umount /var/lib/waydroid &> /dev/null
 	echo -e "$current_password\n" | sudo -S losetup -d $(losetup | grep waydroid.img | cut -d " " -f1) &> /dev/null
 
-	# Prepare the custom /var/lib/waydroid from the compressed image in extras/
-	gunzip -k -f extras/waydroid.img.gz && \
-		mkfs.ext4 -F extras/waydroid.img && \
-		ROOTDEV=$(sudo losetup --find --show extras/waydroid.img) && \
-		echo -e "$current_password\n" | sudo -S mount $ROOTDEV /var/lib/waydroid
+	# Step 1 - Decompress waydroid.img.gz
+	echo "Decompressing waydroid.img.gz..."
+	gunzip -k -f extras/waydroid.img.gz
+	if [ $? -ne 0 ]; then
+		echo "Error decompressing waydroid.img.gz!"
+		return 1
+	fi
+	echo "Decompressed OK. Size: $(ls -lh extras/waydroid.img | awk '{print $5}')"
+
+	# Step 2 - Format as ext4
+	echo "Formatting waydroid.img as ext4..."
+	echo -e "$current_password\n" | sudo -S mkfs.ext4 -F extras/waydroid.img
+	if [ $? -ne 0 ]; then
+		echo "Error formatting waydroid.img!"
+		return 1
+	fi
+	echo "Format OK."
+
+	# Step 3 - Attach loop device
+	echo "Attaching loop device..."
+	echo -e "$current_password\n" | sudo -S losetup --find extras/waydroid.img
+	if [ $? -ne 0 ]; then
+		echo "Error attaching loop device!"
+		return 1
+	fi
+
+	# Step 4 - Get loop device name
+	ROOTDEV=$(echo -e "$current_password\n" | sudo -S losetup --list -O NAME,BACK-FILE | grep waydroid.img | awk '{print $1}')
+	if [ -z "$ROOTDEV" ]; then
+		echo "Error: could not find loop device for waydroid.img!"
+		return 1
+	fi
+	echo "Loop device: $ROOTDEV"
+
+	# Step 5 - Mount
+	echo "Mounting $ROOTDEV to /var/lib/waydroid..."
+	echo -e "$current_password\n" | sudo -S mount "$ROOTDEV" /var/lib/waydroid
+	if [ $? -ne 0 ]; then
+		echo "Error mounting $ROOTDEV to /var/lib/waydroid!"
+		return 1
+	fi
+	echo "Mounted OK."
 }
 
 unmount_waydroid_var () {
@@ -27,7 +64,6 @@ cleanup_exit () {
 	echo "Something went wrong! Performing cleanup. Run the script again to install Waydroid."
 
 	# Remove installed packages
-	# Note: linux-cachyos-deckify-headers kept intentionally (was pre-existing or needed for other things)
 	echo -e "$current_password\n" | sudo -S pacman -R --noconfirm \
 		libglibutil libgbinder python-gbinder waydroid \
 		wlroots cage wlr-randr &> /dev/null
